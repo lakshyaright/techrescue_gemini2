@@ -27,8 +27,15 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticketNumber, 
 
   useEffect(() => {
     loadMessages();
-    const interval = setInterval(loadMessages, 3000);
-    return () => clearInterval(interval);
+
+    // Direct Firestore real-time snapshot subscription
+    const unsub = api.subscribeToMessages(ticketNumber, (msgs) => {
+      if (msgs && msgs.length > 0) {
+        setMessages(msgs);
+      }
+    });
+
+    return () => unsub();
   }, [ticketNumber]);
 
   useEffect(() => {

@@ -8,7 +8,18 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, getDocs, collection, query, orderBy, limit } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  collection,
+  query,
+  orderBy,
+  limit,
+  onSnapshot,
+  Unsubscribe,
+} from "firebase/firestore";
 
 const API_BASE = "/api";
 
@@ -62,16 +73,13 @@ export const api = {
     phone?: string;
     city?: string;
   }) => {
-    // 1. Create user in Firebase Authentication
     const userCredential = await createUserWithEmailAndPassword(auth, payload.email, payload.password);
     const fbUser = userCredential.user;
 
-    // 2. Update display name
     await updateProfile(fbUser, {
       displayName: `${payload.first_name} ${payload.last_name}`,
     }).catch(() => {});
 
-    // 3. Construct user model
     const newUser: User = {
       id: fbUser.uid,
       email: fbUser.email || payload.email,
@@ -94,7 +102,6 @@ export const api = {
           : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
     };
 
-    // 4. Save to Firestore
     try {
       await setDoc(doc(db, "users", newUser.id), newUser, { merge: true });
     } catch (err) {
@@ -115,6 +122,7 @@ export const api = {
         education: "B.Tech Computer Science / Certified Field Specialist",
         toolset_level: "Enterprise L3 Field Kit",
         summary: "Certified engineer equipped for rapid on-site and remote IT triage.",
+        certifications: ["CompTIA Network+", "AWS Certified Solutions Architect"],
       };
       try {
         await setDoc(doc(db, "engineer_profiles", newUser.id), engineerProf, { merge: true });
@@ -123,7 +131,6 @@ export const api = {
       }
     }
 
-    // 5. Sync to server session
     const syncRes = await api.syncFirebaseSession(newUser, engineerProf);
     return syncRes;
   },
@@ -135,11 +142,9 @@ export const api = {
     if (!password) {
       throw new Error("Password is required for email login.");
     }
-    // 1. Sign in with Firebase Auth
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const uid = userCredential.user.uid;
 
-    // 2. Fetch document from Firestore
     let userData: User | null = null;
     let engineerProf: EngineerProfile | null = null;
 
@@ -157,7 +162,6 @@ export const api = {
     }
 
     if (!userData) {
-      // Fallback build if doc was not present
       userData = {
         id: uid,
         email: userCredential.user.email || email,
@@ -169,7 +173,6 @@ export const api = {
       };
     }
 
-    // 3. Sync to server
     const syncRes = await api.syncFirebaseSession(userData, engineerProf);
     return syncRes;
   },
@@ -183,7 +186,6 @@ export const api = {
     const result = await signInWithPopup(auth, provider);
     const fbUser = result.user;
 
-    // Check if user already has a role profile in Firestore
     try {
       const userSnap = await getDoc(doc(db, "users", fbUser.uid));
       if (userSnap.exists()) {
@@ -200,7 +202,6 @@ export const api = {
       console.warn("Google Sign-In Firestore check:", err);
     }
 
-    // If new user, return for role selection setup
     return {
       isNewUser: true,
       firebaseUser: {
@@ -272,6 +273,7 @@ export const api = {
         education: "B.Tech Computer Science / Certified Field Specialist",
         toolset_level: "Enterprise L3 Field Kit",
         summary: "Certified engineer equipped for rapid on-site and remote IT triage.",
+        certifications: ["CompTIA Network+", "AWS Certified Solutions Architect"],
       };
       try {
         await setDoc(doc(db, "engineer_profiles", newUser.id), engineerProf, { merge: true });
@@ -316,6 +318,9 @@ export const api = {
       recent: Ticket[];
     }>("/client-dashboard"),
 
+  /**
+   * Real Ticket creation writing directly to Firestore & Server
+   */
   raiseQuery: async (ticketData: Partial<Ticket>) => {
     const res = await fetchApi<{ success: boolean; ticket_number: string; ticket: Ticket }>("/raise-query", {
       method: "POST",
@@ -353,6 +358,7 @@ export const api = {
   },
   getExpertAlerts: () => fetchApi<Ticket[]>("/expert-alerts"),
   getEngineerAlerts: () => fetchApi<Ticket[]>("/engineer-alerts"),
+
   acceptTicket: async (ticketNumber: string) => {
     const res = await fetchApi<{ success: boolean; ticket: Ticket }>("/accept-ticket", {
       method: "POST",
@@ -365,6 +371,7 @@ export const api = {
     } catch (e) {}
     return res;
   },
+
   resolveTicket: async (ticketNumber: string, resolutionNote: string, resolutionCategory?: string) => {
     const res = await fetchApi<{ success: boolean; ticket: Ticket }>("/resolve-ticket", {
       method: "POST",
@@ -381,13 +388,23 @@ export const api = {
     } catch (e) {}
     return res;
   },
-  updateQueryStatus: (ticketNumber: string, status: string) =>
-    fetchApi<{ success: boolean; ticket: Ticket }>("/update-query-status", {
+
+  updateQueryStatus: async (ticketNumber: string, status: string) => {
+    const res = await fetchApi<{ success: boolean; ticket: Ticket }>("/update-query-status", {
       method: "POST",
       body: JSON.stringify({ ticket_number: ticketNumber, status }),
-    }),
+    });
+    try {
+      if (res.ticket) {
+        await setDoc(doc(db, "tickets", ticketNumber), res.ticket, { merge: true });
+      }
+    } catch (e) {}
+    return res;
+  },
+
   getMessages: (ticketNumber: string) => fetchApi<TicketMessage[]>(`/messages/${encodeURIComponent(ticketNumber)}`),
   getAllMessages: () => fetchApi<TicketMessage[]>("/all-messages"),
+
   sendMessage: async (ticketNumber: string, message: string, receiverId?: string) => {
     const res = await fetchApi<{ success: boolean; message: TicketMessage }>("/send-message", {
       method: "POST",
@@ -400,17 +417,91 @@ export const api = {
     } catch (e) {}
     return res;
   },
-  getProfile: () => fetchApi<EngineerProfile>("/profile"),
-  saveProfile: (profile: Partial<EngineerProfile>) =>
-    fetchApi<{ success: boolean; profile: EngineerProfile }>("/save-profile", {
+
+  /**
+   * Real-time listeners
+   */
+  subscribeToTickets: (callback: (tickets: Ticket[]) => void): Unsubscribe => {
+    const q = query(collection(db, "tickets"));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const list: Ticket[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as Ticket);
+        });
+        // Sort descending by created_at
+        list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        callback(list);
+      },
+      (error) => {
+        console.warn("Firestore subscribeToTickets error:", error);
+      }
+    );
+  },
+
+  subscribeToMessages: (ticketNumber: string, callback: (messages: TicketMessage[]) => void): Unsubscribe => {
+    const q = query(collection(db, "tickets", ticketNumber, "messages"));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const msgs: TicketMessage[] = [];
+        snapshot.forEach((docSnap) => {
+          msgs.push(docSnap.data() as TicketMessage);
+        });
+        msgs.sort((a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
+        callback(msgs);
+      },
+      (error) => {
+        console.warn("Firestore subscribeToMessages error:", error);
+      }
+    );
+  },
+
+  getProfile: (userId?: string) =>
+    fetchApi<EngineerProfile & { user?: User }>(`/profile${userId ? `?user_id=${encodeURIComponent(userId)}` : ""}`),
+
+  /**
+   * Save Engineer Profile directly to Firestore database and Server
+   */
+  saveProfile: async (
+    profileData: Partial<EngineerProfile> & {
+      user_id?: string;
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      city?: string;
+      company?: string;
+    }
+  ) => {
+    const res = await fetchApi<{ success: boolean; profile: EngineerProfile; user?: User }>("/save-profile", {
       method: "POST",
-      body: JSON.stringify(profile),
-    }),
+      body: JSON.stringify(profileData),
+    });
+
+    const targetUid = profileData.user_id || auth.currentUser?.uid || res.user?.id;
+    if (targetUid) {
+      try {
+        if (res.profile) {
+          await setDoc(doc(db, "engineer_profiles", targetUid), res.profile, { merge: true });
+        }
+        if (res.user) {
+          await setDoc(doc(db, "users", targetUid), res.user, { merge: true });
+        }
+      } catch (err) {
+        console.warn("Firestore direct profile save:", err);
+      }
+    }
+
+    return res;
+  },
+
   diagnoseWithAI: (queryText: string, category?: string, subcategory?: string) =>
     fetchApi<{ success: boolean; diagnostics: AIDiagnosticResult }>("/ai/diagnose", {
       method: "POST",
       body: JSON.stringify({ query: queryText, category, subcategory }),
     }),
+
   getHAMetrics: () => fetchApi<SystemMetrics>("/system/ha-metrics"),
   simulateFailover: () =>
     fetchApi<{ success: boolean; message: string; cluster_nodes: any[] }>("/system/simulate-failover", {

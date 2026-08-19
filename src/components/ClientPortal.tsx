@@ -89,8 +89,24 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 10000);
-    return () => clearInterval(interval);
+
+    // Real-time Firestore subscription for client tickets & KPIs
+    const unsub = api.subscribeToTickets((tickets) => {
+      setAllTickets(tickets);
+      const openCount = tickets.filter((t) => t.status === "open").length;
+      const inProgCount = tickets.filter((t) => t.status === "in_progress").length;
+      const resCount = tickets.filter((t) => t.status === "resolved" || t.status === "closed").length;
+
+      setDashboardData({
+        total: tickets.length,
+        open: openCount,
+        inProgress: inProgCount,
+        resolved: resCount,
+        recent: tickets.slice(0, 5),
+      });
+    });
+
+    return () => unsub();
   }, []);
 
   const handleFilterExperts = async () => {

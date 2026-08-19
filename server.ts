@@ -867,42 +867,94 @@ app.post("/api/send-message", (req, res) => {
 // --- PROFILE ENDPOINTS ---
 
 app.get("/api/profile", (req, res) => {
-  const user = users.find((u) => u.id === currentUserId) || users[1];
-  const profile = engineerProfiles.find((p) => p.user_id === user.id) || engineerProfiles[0];
-  res.json(profile);
+  const targetId = (req.query.user_id as string) || currentUserId;
+  const user = users.find((u) => u.id === targetId) || (currentUserId ? users.find((u) => u.id === currentUserId) : null) || users[0];
+  let profile = engineerProfiles.find((p) => p.user_id === user?.id);
+  if (!profile && user) {
+    profile = {
+      id: `prof-${user.id}`,
+      user_id: user.id,
+      role: user.role === "field_engineer" ? "Field Engineer" : "Cloud Engineer",
+      categories: ["Hardware", "Network", "Cloud Infrastructure"],
+      subskills: ["Diagnostics", "Emergency Support", "Incident Response"],
+      experience: "5+ years",
+      education: "B.S. Information Technology / Certified Specialist",
+      summary: "Certified engineer equipped for rapid on-site and remote IT triage.",
+      hourly_rate: 95,
+      dispatch_radius_km: 40,
+      toolset_level: "Enterprise L3 Field Kit",
+      certifications: ["CompTIA Network+", "AWS Certified Solutions Architect"],
+    };
+    engineerProfiles.push(profile);
+  }
+  res.json({ ...profile, user });
 });
 
 app.post("/api/save-profile", (req, res) => {
-  const user = users.find((u) => u.id === currentUserId) || users[1];
-  const { categories, subskills, role, experience, education, summary, hourly_rate, certifications } = req.body;
+  const targetId = req.body.user_id || currentUserId;
+  const user = users.find((u) => u.id === targetId) || (currentUserId ? users.find((u) => u.id === currentUserId) : null) || users[0];
 
-  let profile = engineerProfiles.find((p) => p.user_id === user.id);
+  const {
+    first_name,
+    last_name,
+    phone,
+    city,
+    state,
+    country,
+    company,
+    categories,
+    subskills,
+    role,
+    experience,
+    education,
+    summary,
+    hourly_rate,
+    certifications,
+    dispatch_radius_km,
+    toolset_level,
+  } = req.body;
+
+  if (user) {
+    if (first_name) user.first_name = first_name;
+    if (last_name) user.last_name = last_name;
+    if (phone) user.phone = phone;
+    if (city) user.city = city;
+    if (state) user.state = state;
+    if (country) user.country = country;
+    if (company) user.company = company;
+  }
+
+  let profile = engineerProfiles.find((p) => p.user_id === (user?.id || targetId));
   if (!profile) {
     profile = {
-      id: `prof-${Date.now()}`,
-      user_id: user.id,
+      id: `prof-${user?.id || targetId}`,
+      user_id: user?.id || targetId,
       role: role || "Cloud Engineer",
-      categories: categories || ["Hardware", "Software"],
-      subskills: subskills || ["IT Support"],
-      experience: experience || "3 years",
-      education: education || "Bachelor's",
+      categories: categories || ["Hardware", "Network", "Cloud Infrastructure"],
+      subskills: subskills || ["Diagnostics", "Emergency Support"],
+      experience: experience || "5+ years",
+      education: education || "B.S. Information Technology",
       summary: summary || "",
-      hourly_rate: Number(hourly_rate) || 75,
+      hourly_rate: Number(hourly_rate) || 95,
+      dispatch_radius_km: Number(dispatch_radius_km) || 40,
+      toolset_level: toolset_level || "Enterprise L3 Field Kit",
       certifications: certifications || [],
     };
     engineerProfiles.push(profile);
   } else {
-    profile.categories = categories || profile.categories;
-    profile.subskills = subskills || profile.subskills;
-    profile.role = role || profile.role;
-    profile.experience = experience || profile.experience;
-    profile.education = education || profile.education;
-    profile.summary = summary || profile.summary;
+    if (categories) profile.categories = categories;
+    if (subskills) profile.subskills = subskills;
+    if (role) profile.role = role;
+    if (experience) profile.experience = experience;
+    if (education) profile.education = education;
+    if (summary !== undefined) profile.summary = summary;
     if (hourly_rate) profile.hourly_rate = Number(hourly_rate);
     if (certifications) profile.certifications = certifications;
+    if (dispatch_radius_km) profile.dispatch_radius_km = Number(dispatch_radius_km);
+    if (toolset_level) profile.toolset_level = toolset_level;
   }
 
-  res.json({ success: true, profile });
+  res.json({ success: true, profile, user });
 });
 
 // --- AI DIAGNOSTICS ENDPOINT ---
