@@ -439,15 +439,37 @@ app.get("/api/me", (req, res) => {
   res.json({ ...user, engineer_profiles: profile ? [profile] : [] });
 });
 
-app.post("/api/auth/switch-demo-user", (req, res) => {
-  const { user_id } = req.body;
-  const user = users.find((u) => u.id === user_id);
-  if (!user) {
-    return res.status(404).json({ error: "User not found" });
+app.post("/api/auth/firebase-sync", (req, res) => {
+  const { user, profile } = req.body;
+  if (!user || !user.id || !user.email) {
+    return res.status(400).json({ error: "Invalid user data for synchronization" });
   }
-  currentUserId = user.id;
-  const profile = engineerProfiles.find((p) => p.user_id === user.id);
-  res.json({ success: true, user: { ...user, engineer_profiles: profile ? [profile] : [] } });
+
+  const existingIndex = users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
+  if (existingIndex >= 0) {
+    users[existingIndex] = { ...users[existingIndex], ...user };
+    currentUserId = users[existingIndex].id;
+  } else {
+    users.push(user);
+    currentUserId = user.id;
+  }
+
+  if (profile && (user.role === "expert" || user.role === "field_engineer")) {
+    const profIdx = engineerProfiles.findIndex((p) => p.user_id === user.id);
+    if (profIdx >= 0) {
+      engineerProfiles[profIdx] = { ...engineerProfiles[profIdx], ...profile };
+    } else {
+      engineerProfiles.push(profile);
+    }
+  }
+
+  const userProfile = engineerProfiles.find((p) => p.user_id === currentUserId);
+  const activeUser = users.find((u) => u.id === currentUserId);
+  res.json({
+    success: true,
+    user: activeUser ? { ...activeUser, engineer_profiles: userProfile ? [userProfile] : [] } : user,
+    role: activeUser?.role || user.role,
+  });
 });
 
 app.post("/api/auth/login", (req, res) => {

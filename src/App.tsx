@@ -124,7 +124,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await api.logout();
+      await api.firebaseLogout();
     } catch (e) {}
     setCurrentUser(null);
     setActivePortal("auth");
