@@ -125,6 +125,7 @@ export const api = {
       body: JSON.stringify({ ticket_number: ticketNumber, status }),
     }),
   getMessages: (ticketNumber: string) => fetchApi<TicketMessage[]>(`/messages/${encodeURIComponent(ticketNumber)}`),
+  getAllMessages: () => fetchApi<TicketMessage[]>("/all-messages"),
   sendMessage: async (ticketNumber: string, message: string, receiverId?: string) => {
     const res = await fetchApi<{ success: boolean; message: TicketMessage }>("/send-message", {
       method: "POST",

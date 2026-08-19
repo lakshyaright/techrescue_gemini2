@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Navbar } from "./components/Navbar.tsx";
 import { PublicLanding } from "./components/PublicLanding.tsx";
 import { ClientPortal } from "./components/ClientPortal.tsx";
@@ -7,9 +7,10 @@ import { OperationsCenter } from "./components/OperationsCenter.tsx";
 import { TicketDetailModal } from "./components/TicketDetailModal.tsx";
 import { TicketChatModal } from "./components/TicketChatModal.tsx";
 import { RaiseQueryModal } from "./components/RaiseQueryModal.tsx";
+import { ChatNotificationToast } from "./components/ChatNotificationToast.tsx";
 import { api } from "./lib/api.ts";
-import type { User, Ticket } from "./types.ts";
-import { Server, ShieldCheck, Heart, ArrowUpRight } from "lucide-react";
+import { playNotificationSound } from "./lib/notificationSound.ts";
+import type { User, Ticket, TicketMessage } from "./types.ts";
 
 export default function App() {
   const [activePortal, setActivePortal] = useState<"landing" | "client" | "expert" | "ops">("client");
@@ -18,6 +19,12 @@ export default function App() {
   const [inspectedTicket, setInspectedTicket] = useState<Ticket | null>(null);
   const [activeChatTicketNumber, setActiveChatTicketNumber] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Chat notification state
+  const [chatNotifications, setChatNotifications] = useState<TicketMessage[]>([]);
+  const [activeChatAlert, setActiveChatAlert] = useState<TicketMessage | null>(null);
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
 
   const loadCurrentUser = async () => {
     try {
@@ -28,9 +35,46 @@ export default function App() {
     }
   };
 
+  // Poll for live messages across all tickets and trigger instant notifications
+  const pollNewMessages = async () => {
+    try {
+      const allMsgs = await api.getAllMessages();
+      if (!allMsgs || !Array.isArray(allMsgs)) return;
+
+      if (!initialLoadDoneRef.current) {
+        // First run: populate known IDs without alert storm
+        allMsgs.forEach((m) => knownMessageIdsRef.current.add(m.id));
+        initialLoadDoneRef.current = true;
+        return;
+      }
+
+      // Check for incoming messages
+      for (const msg of allMsgs) {
+        if (!knownMessageIdsRef.current.has(msg.id)) {
+          knownMessageIdsRef.current.add(msg.id);
+
+          // If message is from someone else, trigger notification
+          if (currentUser && msg.sender_id !== currentUser.id) {
+            playNotificationSound();
+            setActiveChatAlert(msg);
+            setChatNotifications((prev) => [msg, ...prev.filter((p) => p.id !== msg.id)]);
+          }
+        }
+      }
+    } catch (err) {
+      // Silently ignore background polling glitches
+    }
+  };
+
   useEffect(() => {
     loadCurrentUser();
   }, []);
+
+  useEffect(() => {
+    pollNewMessages();
+    const interval = setInterval(pollNewMessages, 2500);
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -68,6 +112,13 @@ export default function App() {
     setInspectedTicket(newTicket);
   };
 
+  const handleOpenChat = (ticketNumber: string) => {
+    // Dismiss alert for this ticket and open chat
+    setActiveChatAlert(null);
+    setChatNotifications((prev) => prev.filter((m) => m.ticket_number !== ticketNumber));
+    setActiveChatTicketNumber(ticketNumber);
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans selection:bg-teal-500 selection:text-white">
       {/* Toast Notification */}
@@ -78,7 +129,16 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Header & Workspace Switcher */}
+      {/* Floating Real-Time Chat Notification Toast */}
+      {activeChatAlert && (
+        <ChatNotificationToast
+          message={activeChatAlert}
+          onOpenChat={handleOpenChat}
+          onDismiss={() => setActiveChatAlert(null)}
+        />
+      )}
+
+      {/* Main Header & Workspace Switcher with Chat Notification Bell */}
       <Navbar
         activePortal={activePortal}
         setActivePortal={setActivePortal}
@@ -86,6 +146,9 @@ export default function App() {
         onSwitchUser={handleSwitchUser}
         onToggleOnline={handleToggleOnline}
         onOpenRaiseModal={() => setIsRaiseModalOpen(true)}
+        chatNotifications={chatNotifications}
+        onOpenChat={handleOpenChat}
+        onClearNotifications={() => setChatNotifications([])}
       />
 
       {/* Main Content View Container */}
@@ -104,7 +167,7 @@ export default function App() {
             currentUser={currentUser}
             onOpenRaiseModal={() => setIsRaiseModalOpen(true)}
             onInspectTicket={(t) => setInspectedTicket(t)}
-            onOpenChat={(ticketNum) => setActiveChatTicketNumber(ticketNum)}
+            onOpenChat={handleOpenChat}
           />
         )}
 
@@ -113,7 +176,7 @@ export default function App() {
             currentUser={currentUser}
             onToggleOnline={handleToggleOnline}
             onInspectTicket={(t) => setInspectedTicket(t)}
-            onOpenChat={(ticketNum) => setActiveChatTicketNumber(ticketNum)}
+            onOpenChat={handleOpenChat}
           />
         )}
 
@@ -134,7 +197,7 @@ export default function App() {
           onClose={() => setInspectedTicket(null)}
           onOpenChat={(ticketNum) => {
             setInspectedTicket(null);
-            setActiveChatTicketNumber(ticketNum);
+            handleOpenChat(ticketNum);
           }}
         />
       )}

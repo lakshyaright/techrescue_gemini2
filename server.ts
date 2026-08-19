@@ -888,13 +888,18 @@ app.post("/api/update-query-status", (req, res) => {
   res.json({ success: true, ticket });
 });
 
-// --- REAL-TIME MESSAGING ---
+// --- REAL-TIME MESSAGING & NOTIFICATIONS ---
 
 app.get("/api/messages/:ticket_number", (req, res) => {
   const msgs = ticketMessages.filter(
     (m) => m.ticket_number.toLowerCase() === req.params.ticket_number.toLowerCase()
   );
   res.json(msgs);
+});
+
+app.get("/api/all-messages", (req, res) => {
+  // Returns all recent messages for real-time notification tracking
+  res.json(ticketMessages.slice(-50));
 });
 
 app.post("/api/send-message", (req, res) => {
@@ -923,22 +928,6 @@ app.post("/api/send-message", (req, res) => {
   if (ticket) {
     ticket.messages_count = (ticket.messages_count || 0) + 1;
     ticket.updated_at = new Date().toISOString();
-  }
-
-  // Simulated real-time response if client sent message to expert or vice versa
-  if (user.role === "client") {
-    setTimeout(() => {
-      const expertReply: TicketMessage = {
-        id: `msg-${Date.now() + 1}`,
-        ticket_number: targetTicket,
-        sender_id: "usr-expert-3",
-        sender_name: "Sarah Jenkins",
-        sender_role: "expert",
-        message: `Thanks for the update! I have received your message and verified the log entries in real-time. Continuing triage.`,
-        timestamp: new Date().toISOString(),
-      };
-      ticketMessages.push(expertReply);
-    }, 1200);
   }
 
   res.json({ success: true, message: newMsg });
