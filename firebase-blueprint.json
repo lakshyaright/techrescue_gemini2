@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role and availability information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "first_name": { "type": "string", "maxLength": 100 },
+        "last_name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["client", "expert", "field_engineer", "admin"] },
+        "online": { "type": "boolean" },
+        "company": { "type": "string", "maxLength": 150 },
+        "rating": { "type": "number" },
+        "avatar_url": { "type": "string", "maxLength": 500 },
+        "city": { "type": "string", "maxLength": 100 },
+        "state": { "type": "string", "maxLength": 100 },
+        "country": { "type": "string", "maxLength": 100 },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "first_name", "last_name", "email", "role"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "IT Support and Field Rescue Service Ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ticket_number": { "type": "string", "maxLength": 50 },
+        "client_id": { "type": "string", "maxLength": 128 },
+        "client_name": { "type": "string", "maxLength": 150 },
+        "client_email": { "type": "string", "format": "email", "maxLength": 150 },
+        "client_company": { "type": "string", "maxLength": 150 },
+        "short_description": { "type": "string", "maxLength": 300 },
+        "detailed_description": { "type": "string", "maxLength": 3000 },
+        "category": { "type": "string", "maxLength": 100 },
+        "subcategory": { "type": "string", "maxLength": 100 },
+        "impact": { "type": "string", "enum": ["Single User", "Multiple Users", "Organization"] },
+        "urgency": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"] },
+        "priority": { "type": "string", "enum": ["P1", "P2", "P3", "P4"] },
+        "status": { "type": "string", "enum": ["open", "in_progress", "resolved", "closed", "ignored"] },
+        "assignment_group": { "type": "string", "maxLength": 100 },
+        "support_type": { "type": "string", "enum": ["remote", "field_onsite"] },
+        "location": { "type": "string", "maxLength": 200 },
+        "assigned_engineer_id": { "type": "string", "maxLength": 128 },
+        "assigned_engineer_name": { "type": "string", "maxLength": 150 },
+        "assigned_engineer_role": { "type": "string", "maxLength": 150 },
+        "sla_target_hours": { "type": "number" },
+        "resolution_note": { "type": "string", "maxLength": 2000 },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "resolved_at": { "type": "string" }
+      },
+      "required": ["ticket_number", "short_description", "category", "status", "priority", "created_at"]
+    },
+    "TicketMessage": {
+      "title": "TicketMessage",
+      "description": "Real-time communication message for a ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ticket_number": { "type": "string", "maxLength": 50 },
+        "sender_id": { "type": "string", "maxLength": 128 },
+        "sender_name": { "type": "string", "maxLength": 150 },
+        "sender_role": { "type": "string", "maxLength": 50 },
+        "receiver_id": { "type": "string", "maxLength": 128 },
+        "message": { "type": "string", "maxLength": 4000 },
+        "timestamp": { "type": "string" },
+        "is_automated": { "type": "boolean" }
+      },
+      "required": ["ticket_number", "sender_id", "sender_name", "message", "timestamp"]
+    },
+    "EngineerProfile": {
+      "title": "EngineerProfile",
+      "description": "Professional engineer credentials and dispatch details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "user_id": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 150 },
+        "hourly_rate": { "type": "number" },
+        "dispatch_radius_km": { "type": "number" },
+        "experience": { "type": "string", "maxLength": 100 },
+        "toolset_level": { "type": "string", "maxLength": 100 },
+        "summary": { "type": "string", "maxLength": 1000 }
+      },
+      "required": ["user_id", "role"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile records and presence"
+    },
+    "/tickets/{ticketId}": {
+      "schema": "Ticket",
+      "description": "Support tickets and field dispatch requests"
+    },
+    "/tickets/{ticketId}/messages/{messageId}": {
+      "schema": "TicketMessage",
+      "description": "Real-time discussion messages per ticket"
+    },
+    "/engineer_profiles/{profileId}": {
+      "schema": "EngineerProfile",
+      "description": "Engineer technical qualifications and rates"
+    }
+  }
+}
