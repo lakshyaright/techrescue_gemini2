@@ -1,0 +1,6 @@
+{
+  "name": "TechRescue",
+  "description": "High-availability enterprise on-demand IT support and certified field engineer rescue platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
