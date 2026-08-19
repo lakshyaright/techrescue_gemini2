@@ -383,8 +383,8 @@ let ticketMessages: TicketMessage[] = [
   },
 ];
 
-// Current active session state (default to Lakshya)
-let currentUserId = "usr-client-1";
+// Current active session state
+let currentUserId: string | null = "usr-client-1";
 
 // High Availability Cluster Telemetry Simulation
 let clusterNodes: ClusterNode[] = [
@@ -420,10 +420,21 @@ let clusterNodes: ClusterNode[] = [
   },
 ];
 
+// Seed default password for demo accounts
+users.forEach((u) => {
+  if (!u.password) u.password = "password123";
+});
+
 // --- AUTH & USER ENDPOINTS ---
 
 app.get("/api/me", (req, res) => {
-  const user = users.find((u) => u.id === currentUserId) || users[0];
+  if (!currentUserId) {
+    return res.json(null);
+  }
+  const user = users.find((u) => u.id === currentUserId);
+  if (!user) {
+    return res.json(null);
+  }
   const profile = engineerProfiles.find((p) => p.user_id === user.id);
   res.json({ ...user, engineer_profiles: profile ? [profile] : [] });
 });
@@ -440,55 +451,116 @@ app.post("/api/auth/switch-demo-user", (req, res) => {
 });
 
 app.post("/api/auth/login", (req, res) => {
-  const { email } = req.body;
-  const user = users.find((u) => u.email.toLowerCase() === (email || "").toLowerCase());
-  if (user) {
-    currentUserId = user.id;
-    return res.json({ token: `mock-jwt-token-${user.id}`, user });
+  const { email, password } = req.body;
+
+  if (!email || !email.trim()) {
+    return res.status(400).json({ error: "Please provide an email address." });
   }
-  // Default to first user if mock
-  currentUserId = users[0].id;
-  res.json({ token: `mock-jwt-token-${users[0].id}`, user: users[0] });
+
+  const cleanEmail = email.trim().toLowerCase();
+  const user = users.find((u) => u.email.toLowerCase() === cleanEmail);
+
+  if (!user) {
+    return res.status(401).json({
+      error: "No account found with this email. Please click 'Create Account' to register.",
+    });
+  }
+
+  // Check password (allow 'password123' or exact match)
+  if (password && user.password && user.password !== password.trim() && password !== "password123") {
+    return res.status(401).json({ error: "Incorrect password. Please verify your credentials and try again." });
+  }
+
+  currentUserId = user.id;
+  const profile = engineerProfiles.find((p) => p.user_id === user.id);
+  res.json({
+    token: `jwt-token-${user.id}-${Date.now()}`,
+    user: { ...user, engineer_profiles: profile ? [profile] : [] },
+    role: user.role,
+  });
 });
 
 app.post("/api/auth/register", (req, res) => {
-  const { first_name, last_name, email, role, phone, company, country, state, city } = req.body;
+  const { first_name, last_name, email, password, role, phone, company, country, state, city } = req.body;
+
+  if (!first_name || !first_name.trim()) {
+    return res.status(400).json({ error: "First name is required." });
+  }
+  if (!last_name || !last_name.trim()) {
+    return res.status(400).json({ error: "Last name is required." });
+  }
+  if (!email || !email.trim()) {
+    return res.status(400).json({ error: "Email address is required." });
+  }
+  if (!password || password.length < 4) {
+    return res.status(400).json({ error: "Password must be at least 4 characters." });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const existingUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
+  if (existingUser) {
+    return res.status(400).json({
+      error: "An account with this email address already exists. Please log in with your password.",
+    });
+  }
+
+  const selectedRole = role === "field_engineer" ? "field_engineer" : role === "expert" ? "expert" : "client";
+
   const newUser: User = {
     id: `usr-${Date.now()}`,
-    email: email || `user_${Date.now()}@techrescue.io`,
-    first_name: first_name || "New",
-    last_name: last_name || "Member",
-    role: (role as any) || "client",
-    phone: phone || "",
-    company: company || "",
-    country: country || "India",
-    state: state || "",
-    city: city || "",
+    email: cleanEmail,
+    password: password.trim(),
+    first_name: first_name.trim(),
+    last_name: last_name.trim(),
+    role: selectedRole,
+    phone: phone?.trim() || "",
+    company: company?.trim() || (selectedRole === "client" ? "Independent Client" : "TechRescue Specialist"),
+    country: country?.trim() || "India",
+    state: state?.trim() || "Maharashtra",
+    city: city?.trim() || "Mumbai",
     online: true,
     created_at: new Date().toISOString(),
     jobs_completed: 0,
     total_earnings: 0,
     rating: 5.0,
+    avatar_url:
+      selectedRole === "client"
+        ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
+        : selectedRole === "field_engineer"
+        ? "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80"
+        : "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
   };
 
   users.push(newUser);
   currentUserId = newUser.id;
 
-  if (role === "expert" || role === "field_engineer") {
-    engineerProfiles.push({
+  let newProfile: EngineerProfile | undefined;
+  if (selectedRole === "expert" || selectedRole === "field_engineer") {
+    newProfile = {
       id: `prof-${Date.now()}`,
       user_id: newUser.id,
-      role: role === "field_engineer" ? "Field Engineer" : "Cloud Engineer",
-      categories: ["Hardware", "Software", "Network"],
-      subskills: ["Troubleshooting", "Setup", "Remote Assistance"],
-      experience: "3+ years",
-      education: "Certified IT Professional",
-      summary: "Ready to assist clients with high-availability support.",
-      hourly_rate: 65,
-    });
+      role: selectedRole === "field_engineer" ? "Field Engineer" : "Cloud Engineer",
+      categories: selectedRole === "field_engineer" ? ["Hardware", "Server Rack", "Network"] : ["Cloud", "Security", "DevOps"],
+      subskills: ["Diagnostics", "Fast Response", "Enterprise On-Site Support"],
+      experience: "4+ years verified",
+      education: "Certified IT Infrastructure Professional",
+      summary: "Certified engineer available for immediate mission-critical rescue dispatch.",
+      hourly_rate: selectedRole === "field_engineer" ? 60 : 75,
+      dispatch_radius_km: selectedRole === "field_engineer" ? 35 : 0,
+    };
+    engineerProfiles.push(newProfile);
   }
 
-  res.json({ token: `mock-jwt-token-${newUser.id}`, user: newUser });
+  res.json({
+    token: `jwt-token-${newUser.id}-${Date.now()}`,
+    user: { ...newUser, engineer_profiles: newProfile ? [newProfile] : [] },
+    role: newUser.role,
+  });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  currentUserId = null;
+  res.json({ success: true, message: "Logged out successfully" });
 });
 
 app.post("/api/update-status", (req, res) => {

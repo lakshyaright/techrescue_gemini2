@@ -26,22 +26,33 @@ export async function fetchApi<T = any>(path: string, options: RequestInit = {})
 }
 
 export const api = {
-  getCurrentUser: () => fetchApi<User & { engineer_profiles?: EngineerProfile[] }>("/me"),
+  getCurrentUser: () => fetchApi<(User & { engineer_profiles?: EngineerProfile[] }) | null>("/me"),
   switchDemoUser: (userId: string) =>
     fetchApi<{ success: boolean; user: User & { engineer_profiles?: EngineerProfile[] } }>("/auth/switch-demo-user", {
       method: "POST",
       body: JSON.stringify({ user_id: userId }),
     }),
-  login: (email: string) =>
-    fetchApi<{ token: string; user: User }>("/auth/login", {
+  login: (email: string, password?: string) =>
+    fetchApi<{ token: string; user: User & { engineer_profiles?: EngineerProfile[] }; role: string }>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, password }),
     }),
-  register: (payload: Partial<User>) =>
-    fetchApi<{ token: string; user: User }>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+  register: async (payload: Partial<User>) => {
+    const res = await fetchApi<{ token: string; user: User & { engineer_profiles?: EngineerProfile[] }; role: string }>(
+      "/auth/register",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+    try {
+      if (res.user) {
+        await setDoc(doc(db, "users", res.user.id), res.user, { merge: true });
+      }
+    } catch (e) {}
+    return res;
+  },
+  logout: () => fetchApi<{ success: boolean; message: string }>("/auth/logout", { method: "POST" }),
   updateStatus: (online: boolean) =>
     fetchApi<{ success: boolean; online: boolean }>("/update-status", {
       method: "POST",

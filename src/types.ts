@@ -3,6 +3,7 @@ export type UserRole = 'client' | 'expert' | 'field_engineer' | 'admin';
 export interface User {
   id: string;
   email: string;
+  password?: string;
   first_name: string;
   last_name: string;
   role: UserRole;

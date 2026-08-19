@@ -8,17 +8,24 @@ import { TicketDetailModal } from "./components/TicketDetailModal.tsx";
 import { TicketChatModal } from "./components/TicketChatModal.tsx";
 import { RaiseQueryModal } from "./components/RaiseQueryModal.tsx";
 import { ChatNotificationToast } from "./components/ChatNotificationToast.tsx";
+import { AuthModal } from "./components/AuthModal.tsx";
 import { api } from "./lib/api.ts";
 import { playNotificationSound } from "./lib/notificationSound.ts";
-import type { User, Ticket, TicketMessage } from "./types.ts";
+import type { User, Ticket, TicketMessage, UserRole } from "./types.ts";
 
 export default function App() {
-  const [activePortal, setActivePortal] = useState<"landing" | "client" | "expert" | "ops">("client");
+  const [activePortal, setActivePortal] = useState<"landing" | "client" | "expert" | "ops">("landing");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isRaiseModalOpen, setIsRaiseModalOpen] = useState(false);
   const [inspectedTicket, setInspectedTicket] = useState<Ticket | null>(null);
   const [activeChatTicketNumber, setActiveChatTicketNumber] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Authentication Modal state
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<"login" | "register">("login");
+  const [authModalRole, setAuthModalRole] = useState<UserRole>("client");
+  const [authReasonMessage, setAuthReasonMessage] = useState<string | undefined>(undefined);
 
   // Chat notification state
   const [chatNotifications, setChatNotifications] = useState<TicketMessage[]>([]);
@@ -29,9 +36,21 @@ export default function App() {
   const loadCurrentUser = async () => {
     try {
       const user = await api.getCurrentUser();
-      setCurrentUser(user);
+      if (user && user.id) {
+        setCurrentUser(user);
+        if (user.role === "client") {
+          setActivePortal("client");
+        } else if (user.role === "expert" || user.role === "field_engineer") {
+          setActivePortal("expert");
+        }
+      } else {
+        setCurrentUser(null);
+        setActivePortal("landing");
+      }
     } catch (err) {
-      console.error("Failed to load user:", err);
+      console.debug("No active user session:", err);
+      setCurrentUser(null);
+      setActivePortal("landing");
     }
   };
 
@@ -81,6 +100,36 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleOpenAuth = (
+    mode: "login" | "register" = "login",
+    role: UserRole = "client",
+    reason?: string
+  ) => {
+    setAuthModalMode(mode);
+    setAuthModalRole(role);
+    setAuthReasonMessage(reason);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleAuthSuccess = (user: User, redirectPortal: "client" | "expert") => {
+    setCurrentUser(user);
+    setActivePortal(redirectPortal);
+    showToast(
+      `Welcome, ${user.first_name}! Logged into ${
+        redirectPortal === "client" ? "Client Dashboard" : "Engineer Console"
+      }.`
+    );
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch (e) {}
+    setCurrentUser(null);
+    setActivePortal("landing");
+    showToast("You have been signed out.");
+  };
+
   const handleSwitchUser = async (userId: string) => {
     try {
       const res = await api.switchDemoUser(userId);
@@ -113,10 +162,21 @@ export default function App() {
   };
 
   const handleOpenChat = (ticketNumber: string) => {
-    // Dismiss alert for this ticket and open chat
     setActiveChatAlert(null);
     setChatNotifications((prev) => prev.filter((m) => m.ticket_number !== ticketNumber));
     setActiveChatTicketNumber(ticketNumber);
+  };
+
+  const handleRaiseTicketRequest = () => {
+    if (!currentUser) {
+      handleOpenAuth(
+        "register",
+        "client",
+        "Please create your Client Account or sign in to dispatch on-demand IT & field rescue."
+      );
+      return;
+    }
+    setIsRaiseModalOpen(true);
   };
 
   return (
@@ -138,14 +198,16 @@ export default function App() {
         />
       )}
 
-      {/* Main Header & Workspace Switcher with Chat Notification Bell */}
+      {/* Main Header & Workspace Switcher with Chat Notification Bell and Auth Controls */}
       <Navbar
         activePortal={activePortal}
         setActivePortal={setActivePortal}
         currentUser={currentUser}
         onSwitchUser={handleSwitchUser}
         onToggleOnline={handleToggleOnline}
-        onOpenRaiseModal={() => setIsRaiseModalOpen(true)}
+        onOpenRaiseModal={handleRaiseTicketRequest}
+        onOpenAuthModal={handleOpenAuth}
+        onLogout={handleLogout}
         chatNotifications={chatNotifications}
         onOpenChat={handleOpenChat}
         onClearNotifications={() => setChatNotifications([])}
@@ -155,9 +217,21 @@ export default function App() {
       <main className="flex-1">
         {activePortal === "landing" && (
           <PublicLanding
-            onOpenRaiseModal={() => setIsRaiseModalOpen(true)}
-            onNavigateToClient={() => setActivePortal("client")}
-            onNavigateToExpert={() => setActivePortal("expert")}
+            onOpenRaiseModal={handleRaiseTicketRequest}
+            onNavigateToClient={() => {
+              if (!currentUser) {
+                handleOpenAuth("login", "client", "Sign in with your Client account to access the Client Hub.");
+              } else {
+                setActivePortal("client");
+              }
+            }}
+            onNavigateToExpert={() => {
+              if (!currentUser) {
+                handleOpenAuth("login", "expert", "Sign in with your Engineer credentials to access the Engineer Console.");
+              } else {
+                setActivePortal("expert");
+              }
+            }}
             onNavigateToOps={() => setActivePortal("ops")}
           />
         )}
@@ -165,7 +239,7 @@ export default function App() {
         {activePortal === "client" && (
           <ClientPortal
             currentUser={currentUser}
-            onOpenRaiseModal={() => setIsRaiseModalOpen(true)}
+            onOpenRaiseModal={handleRaiseTicketRequest}
             onInspectTicket={(t) => setInspectedTicket(t)}
             onOpenChat={handleOpenChat}
           />
@@ -183,7 +257,17 @@ export default function App() {
         {activePortal === "ops" && <OperationsCenter />}
       </main>
 
-      {/* Modals */}
+      {/* Authentication Modal (Sign In / Register / Role Dispatch) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authModalMode}
+        defaultRole={authModalRole}
+        reasonMessage={authReasonMessage}
+        onAuthSuccess={handleAuthSuccess}
+      />
+
+      {/* Ticket Creation Modal */}
       {isRaiseModalOpen && (
         <RaiseQueryModal
           onClose={() => setIsRaiseModalOpen(false)}
@@ -191,6 +275,7 @@ export default function App() {
         />
       )}
 
+      {/* Ticket Details Inspector Modal */}
       {inspectedTicket && (
         <TicketDetailModal
           ticket={inspectedTicket}
@@ -202,6 +287,7 @@ export default function App() {
         />
       )}
 
+      {/* Ticket Live Chat Modal */}
       {activeChatTicketNumber && (
         <TicketChatModal
           ticketNumber={activeChatTicketNumber}
