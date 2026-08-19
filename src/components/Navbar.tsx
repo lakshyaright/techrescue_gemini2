@@ -1,30 +1,26 @@
 import React, { useState } from "react";
 import {
-  ShieldAlert,
   Server,
   UserCheck,
   Briefcase,
-  Layers,
   Globe,
   Radio,
   PlusCircle,
   ChevronDown,
-  Sparkles,
   Bell,
   MessageSquare,
-  X,
   ExternalLink,
   LogIn,
   UserPlus,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import type { User, TicketMessage } from "../types.ts";
 
 interface NavbarProps {
-  activePortal: "landing" | "client" | "expert" | "ops";
-  setActivePortal: (portal: "landing" | "client" | "expert" | "ops") => void;
+  activePortal: "landing" | "client" | "expert" | "ops" | "auth";
+  setActivePortal: (portal: "landing" | "client" | "expert" | "ops" | "auth") => void;
   currentUser: User | null;
-  onSwitchUser: (userId: string) => void;
   onToggleOnline: () => void;
   onOpenRaiseModal: () => void;
   onOpenAuthModal: (mode?: "login" | "register", role?: "client" | "expert" | "field_engineer", reason?: string) => void;
@@ -38,7 +34,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   activePortal,
   setActivePortal,
   currentUser,
-  onSwitchUser,
   onToggleOnline,
   onOpenRaiseModal,
   onOpenAuthModal,
@@ -50,40 +45,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
 
-  const demoUsers = [
-    { id: "usr-client-1", name: "Lakshya Sharma", role: "Client (Director of IT)", company: "Apex Global Tech" },
-    { id: "usr-expert-1", name: "Alex Rivera", role: "Remote Cloud Expert", company: "CloudScale Systems" },
-    { id: "usr-expert-2", name: "Rajesh Kumar", role: "On-Site Field Engineer", company: "Metro Hardware" },
-    { id: "usr-expert-3", name: "Sarah Jenkins", role: "Network Security Specialist", company: "CyberShield Net" },
-  ];
-
   const unreadCount = chatNotifications.length;
 
-  const handlePortalClick = (portal: "landing" | "client" | "expert" | "ops") => {
-    if (portal === "client") {
-      if (!currentUser) {
-        onOpenAuthModal("login", "client", "Please sign in to your Client Account to access the Client Hub & Tickets.");
-        return;
-      }
-      setActivePortal("client");
-    } else if (portal === "expert") {
-      if (!currentUser) {
-        onOpenAuthModal("login", "expert", "Please sign in to your Engineer Account to access the Engineer Console.");
-        return;
-      }
-      setActivePortal("expert");
-    } else {
-      setActivePortal(portal);
-    }
-  };
-
-  const handleRaiseTicketClick = () => {
-    if (!currentUser) {
-      onOpenAuthModal("register", "client", "Please create an account or sign in to dispatch an on-demand engineer ticket.");
-      return;
-    }
-    onOpenRaiseModal();
-  };
+  const isClient = currentUser?.role === "client";
+  const isEngineer = currentUser?.role === "expert" || currentUser?.role === "field_engineer";
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-800 text-slate-100 shadow-md">
@@ -93,7 +58,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-3">
             <button
               id="brand-home-btn"
-              onClick={() => setActivePortal("landing")}
+              onClick={() => {
+                if (currentUser) {
+                  setActivePortal(isClient ? "client" : "expert");
+                } else {
+                  setActivePortal("landing");
+                }
+              }}
               className="flex items-center gap-2.5 text-left group transition cursor-pointer"
             >
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center font-extrabold text-white text-lg tracking-wider shadow-lg shadow-teal-500/20 group-hover:scale-105 transition-transform">
@@ -115,58 +86,84 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </div>
 
-          {/* Center Navigation: Workspaces */}
+          {/* Center Navigation: Strictly Adapts to Role */}
           <nav className="hidden md:flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 text-sm">
-            <button
-              id="nav-landing-btn"
-              onClick={() => handlePortalClick("landing")}
-              className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
-                activePortal === "landing"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-slate-300 hover:text-white hover:bg-slate-700/50"
-              }`}
-            >
-              <Globe className="w-4 h-4" />
-              <span>Platform</span>
-            </button>
+            {/* If NOT logged in */}
+            {!currentUser && (
+              <>
+                <button
+                  id="nav-landing-btn"
+                  onClick={() => setActivePortal("landing")}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                    activePortal === "landing"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-slate-300 hover:text-white hover:bg-slate-700/50"
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                  <span>Platform Overview</span>
+                </button>
+                <button
+                  id="nav-login-gateway-btn"
+                  onClick={() => setActivePortal("auth")}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                    activePortal === "auth"
+                      ? "bg-teal-600 text-white shadow-sm font-bold"
+                      : "text-teal-400 hover:text-teal-300 hover:bg-slate-700/50"
+                  }`}
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Login Gateway</span>
+                </button>
+              </>
+            )}
 
-            <button
-              id="nav-client-btn"
-              onClick={() => handlePortalClick("client")}
-              className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
-                activePortal === "client"
-                  ? "bg-teal-600 text-white shadow-sm"
-                  : "text-slate-300 hover:text-white hover:bg-slate-700/50"
-              }`}
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>Client Portal</span>
-              {currentUser?.role === "client" && (
-                <span className="text-[10px] bg-teal-950 text-teal-300 px-1 rounded border border-teal-800 font-mono">
-                  Active
-                </span>
-              )}
-            </button>
+            {/* If Logged in as CLIENT */}
+            {currentUser && isClient && (
+              <>
+                <button
+                  id="nav-client-btn"
+                  onClick={() => setActivePortal("client")}
+                  className={`px-3.5 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    activePortal === "client"
+                      ? "bg-teal-600 text-white shadow-sm"
+                      : "text-slate-300 hover:text-white hover:bg-slate-700/50"
+                  }`}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>Client Dashboard</span>
+                  <span className="text-[10px] bg-teal-950 text-teal-300 px-1 rounded border border-teal-800 font-mono">
+                    My Hub
+                  </span>
+                </button>
+              </>
+            )}
 
-            <button
-              id="nav-expert-btn"
-              onClick={() => handlePortalClick("expert")}
-              className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
-                activePortal === "expert"
-                  ? "bg-amber-600 text-white shadow-sm"
-                  : "text-slate-300 hover:text-white hover:bg-slate-700/50"
-              }`}
-            >
-              <Briefcase className="w-4 h-4" />
-              <span>Engineer Console</span>
-              {currentUser && (currentUser.role === "expert" || currentUser.role === "field_engineer") && currentUser.online && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              )}
-            </button>
+            {/* If Logged in as ENGINEER */}
+            {currentUser && isEngineer && (
+              <>
+                <button
+                  id="nav-expert-btn"
+                  onClick={() => setActivePortal("expert")}
+                  className={`px-3.5 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    activePortal === "expert"
+                      ? "bg-amber-600 text-white shadow-sm"
+                      : "text-slate-300 hover:text-white hover:bg-slate-700/50"
+                  }`}
+                >
+                  <Briefcase className="w-4 h-4" />
+                  <span>Engineer Console</span>
+                  {currentUser.online && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  )}
+                </button>
+              </>
+            )}
 
+            {/* Cluster Ops (Available to all for transparency) */}
             <button
               id="nav-ops-btn"
-              onClick={() => handlePortalClick("ops")}
+              onClick={() => setActivePortal("ops")}
               className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
                 activePortal === "ops"
                   ? "bg-indigo-600 text-white shadow-sm"
@@ -184,15 +181,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action & User Controls */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Quick Raise Ticket Button */}
-            <button
-              id="header-raise-query-btn"
-              onClick={handleRaiseTicketClick}
-              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-3 sm:px-3.5 py-1.5 rounded-xl font-semibold text-xs sm:text-sm shadow-md shadow-emerald-950 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">Raise Ticket</span>
-            </button>
+            {/* Quick Raise Ticket Button (Only for Client or logged-out prompts) */}
+            {(!currentUser || isClient) && (
+              <button
+                id="header-raise-query-btn"
+                onClick={onOpenRaiseModal}
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-3 sm:px-3.5 py-1.5 rounded-xl font-semibold text-xs sm:text-sm shadow-md shadow-emerald-950 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">Raise Ticket</span>
+              </button>
+            )}
 
             {/* Real-Time Chat Notification Bell */}
             {currentUser && (
@@ -290,7 +289,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
 
             {/* Engineer Online Toggle */}
-            {currentUser && (currentUser.role === "expert" || currentUser.role === "field_engineer") && (
+            {currentUser && isEngineer && (
               <button
                 id="expert-availability-toggle-btn"
                 onClick={onToggleOnline}
@@ -306,12 +305,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* Auth Buttons vs User Profile Dropdown */}
+            {/* Auth Gateway Buttons vs User Profile Dropdown */}
             {!currentUser ? (
               <div className="flex items-center gap-2">
                 <button
                   id="nav-signin-btn"
-                  onClick={() => onOpenAuthModal("login", "client")}
+                  onClick={() => setActivePortal("auth")}
                   className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <LogIn className="w-3.5 h-3.5 text-teal-400" />
@@ -345,8 +344,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="font-semibold text-slate-100 flex items-center gap-1">
                       <span>{currentUser.first_name} {currentUser.last_name}</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 capitalize flex items-center gap-1">
-                      <span>{currentUser.role?.replace("_", " ")}</span>
+                    <div className="text-[10px] text-teal-400 capitalize flex items-center gap-1 font-mono">
+                      <span>{isClient ? "Client" : "Rescue Engineer"}</span>
                     </div>
                   </div>
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -355,70 +354,47 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {showUserMenu && (
                   <div
                     id="user-profile-dropdown"
-                    className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2"
+                    className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2"
                   >
-                    <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-bold text-white">{currentUser.first_name} {currentUser.last_name}</p>
-                        <p className="text-[11px] text-teal-400 capitalize">{currentUser.role.replace("_", " ")}</p>
-                        <p className="text-[10px] text-slate-400 truncate max-w-[180px]">{currentUser.email}</p>
+                    <div className="pb-3 border-b border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Authenticated Account</span>
+                        <span className="text-[10px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-800 font-mono">
+                          {isClient ? "Client Role" : "Engineer Role"}
+                        </span>
                       </div>
+                      <p className="text-sm font-bold text-white mt-1">{currentUser.first_name} {currentUser.last_name}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{currentUser.email}</p>
+                      {currentUser.company && (
+                        <p className="text-[10px] text-teal-400 mt-0.5">{currentUser.company}</p>
+                      )}
+                    </div>
+
+                    <div className="py-2 space-y-1">
+                      <div className="px-2 py-1 text-[11px] text-slate-400">
+                        <span>Role: </span>
+                        <strong className="text-slate-200 capitalize">{currentUser.role.replace("_", " ")}</strong>
+                      </div>
+                      <div className="px-2 py-1 text-[11px] text-slate-400">
+                        <span>Cluster HA: </span>
+                        <span className="text-emerald-400 font-mono">99.994% Active</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800">
                       <button
                         onClick={() => {
                           setShowUserMenu(false);
                           onLogout();
                         }}
-                        className="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-950/60 transition cursor-pointer flex items-center gap-1 text-[11px]"
-                        title="Sign Out"
+                        id="user-signout-btn"
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 font-semibold flex items-center justify-between transition cursor-pointer"
                       >
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span>Sign Out</span>
-                      </button>
-                    </div>
-
-                    <div className="px-3 py-1.5 pt-2">
-                      <p className="text-[10px] uppercase font-semibold text-slate-500 tracking-wider">
-                        Switch Account / Perspective
-                      </p>
-                    </div>
-
-                    <div className="py-1 space-y-1">
-                      {demoUsers.map((u) => (
-                        <button
-                          key={u.id}
-                          onClick={() => {
-                            onSwitchUser(u.id);
-                            setShowUserMenu(false);
-                          }}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition flex items-center justify-between cursor-pointer ${
-                            currentUser.id === u.id
-                              ? "bg-emerald-950/70 text-emerald-300 font-semibold border border-emerald-800/60"
-                              : "text-slate-300 hover:bg-slate-800"
-                          }`}
-                        >
-                          <div>
-                            <p className="font-medium text-slate-100">{u.name}</p>
-                            <p className="text-[10px] text-slate-400">{u.role}</p>
-                          </div>
-                          {currentUser.id === u.id && (
-                            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">
-                              Active
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="pt-2 mt-1 border-t border-slate-800">
-                      <button
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          onOpenAuthModal("register", "client");
-                        }}
-                        className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-teal-400 hover:bg-slate-800 flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>Create Another Account</span>
+                        <span className="flex items-center gap-1.5">
+                          <LogOut className="w-4 h-4" />
+                          <span>Sign Out</span>
+                        </span>
+                        <span className="text-[10px] text-slate-500">Exit session</span>
                       </button>
                     </div>
                   </div>
@@ -430,26 +406,39 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Mobile Portal Navigation Bar */}
         <div className="flex md:hidden items-center justify-around py-2 border-t border-slate-800 text-xs">
+          {!currentUser ? (
+            <>
+              <button
+                onClick={() => setActivePortal("landing")}
+                className={`px-2 py-1 rounded cursor-pointer ${activePortal === "landing" ? "text-emerald-400 font-semibold" : "text-slate-400"}`}
+              >
+                Overview
+              </button>
+              <button
+                onClick={() => setActivePortal("auth")}
+                className={`px-2 py-1 rounded cursor-pointer ${activePortal === "auth" ? "text-teal-400 font-semibold" : "text-slate-400"}`}
+              >
+                Login Gateway
+              </button>
+            </>
+          ) : isClient ? (
+            <button
+              onClick={() => setActivePortal("client")}
+              className={`px-2 py-1 rounded cursor-pointer ${activePortal === "client" ? "text-teal-400 font-semibold" : "text-slate-400"}`}
+            >
+              Client Hub
+            </button>
+          ) : (
+            <button
+              onClick={() => setActivePortal("expert")}
+              className={`px-2 py-1 rounded cursor-pointer ${activePortal === "expert" ? "text-amber-400 font-semibold" : "text-slate-400"}`}
+            >
+              Engineer Console
+            </button>
+          )}
+
           <button
-            onClick={() => handlePortalClick("landing")}
-            className={`px-2 py-1 rounded cursor-pointer ${activePortal === "landing" ? "text-emerald-400 font-semibold" : "text-slate-400"}`}
-          >
-            Showcase
-          </button>
-          <button
-            onClick={() => handlePortalClick("client")}
-            className={`px-2 py-1 rounded cursor-pointer ${activePortal === "client" ? "text-teal-400 font-semibold" : "text-slate-400"}`}
-          >
-            Client Hub
-          </button>
-          <button
-            onClick={() => handlePortalClick("expert")}
-            className={`px-2 py-1 rounded cursor-pointer ${activePortal === "expert" ? "text-amber-400 font-semibold" : "text-slate-400"}`}
-          >
-            Engineer Console
-          </button>
-          <button
-            onClick={() => handlePortalClick("ops")}
+            onClick={() => setActivePortal("ops")}
             className={`px-2 py-1 rounded cursor-pointer ${activePortal === "ops" ? "text-indigo-400 font-semibold" : "text-slate-400"}`}
           >
             HA Ops

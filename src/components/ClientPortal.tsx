@@ -19,6 +19,7 @@ import {
   MapPin,
   Star,
   RefreshCw,
+  UserCheck,
 } from "lucide-react";
 import type { Ticket, User as UserType, EngineerProfile } from "../types.ts";
 import { api } from "../lib/api.ts";
@@ -147,6 +148,38 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Client Identity Header */}
+      {currentUser && (
+        <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white rounded-2xl p-4 sm:p-6 border border-slate-800 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-600/30 border border-teal-500/50 flex items-center justify-center text-teal-300 font-bold">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base sm:text-lg font-bold text-white">
+                  Welcome, {currentUser.first_name} {currentUser.last_name}
+                </h1>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-teal-950 text-teal-300 border border-teal-800">
+                  Client Account
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                {currentUser.company ? `${currentUser.company} • ` : ""}Single Verified Client Identity ({currentUser.email})
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onOpenRaiseModal}
+            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md flex items-center gap-2 transition cursor-pointer"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Dispatch On-Site or Remote SLA</span>
+          </button>
+        </div>
+      )}
+
       {/* Workspace Sub-Navigation */}
       <div className="bg-white rounded-2xl p-2 shadow-xs border border-slate-200 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 overflow-x-auto text-xs font-semibold">

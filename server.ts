@@ -499,8 +499,9 @@ app.post("/api/auth/register", (req, res) => {
   const cleanEmail = email.trim().toLowerCase();
   const existingUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
   if (existingUser) {
+    const existingRoleName = existingUser.role === "client" ? "Client" : "Rescue Engineer";
     return res.status(400).json({
-      error: "An account with this email address already exists. Please log in with your password.",
+      error: `This email is already registered as a ${existingRoleName}. Each person can only create one account on TechRescue. Please log in with your registered credentials.`,
     });
   }
 

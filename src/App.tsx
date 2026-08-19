@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Navbar } from "./components/Navbar.tsx";
+import { AuthPortalView } from "./components/AuthPortalView.tsx";
 import { PublicLanding } from "./components/PublicLanding.tsx";
 import { ClientPortal } from "./components/ClientPortal.tsx";
 import { ExpertPortal } from "./components/ExpertPortal.tsx";
@@ -14,14 +15,14 @@ import { playNotificationSound } from "./lib/notificationSound.ts";
 import type { User, Ticket, TicketMessage, UserRole } from "./types.ts";
 
 export default function App() {
-  const [activePortal, setActivePortal] = useState<"landing" | "client" | "expert" | "ops">("landing");
+  const [activePortal, setActivePortal] = useState<"auth" | "landing" | "client" | "expert" | "ops">("auth");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isRaiseModalOpen, setIsRaiseModalOpen] = useState(false);
   const [inspectedTicket, setInspectedTicket] = useState<Ticket | null>(null);
   const [activeChatTicketNumber, setActiveChatTicketNumber] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Authentication Modal state
+  // Authentication Modal state (for quick in-page prompts)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<"login" | "register">("login");
   const [authModalRole, setAuthModalRole] = useState<UserRole>("client");
@@ -45,12 +46,12 @@ export default function App() {
         }
       } else {
         setCurrentUser(null);
-        setActivePortal("landing");
+        setActivePortal("auth");
       }
     } catch (err) {
       console.debug("No active user session:", err);
       setCurrentUser(null);
-      setActivePortal("landing");
+      setActivePortal("auth");
     }
   };
 
@@ -126,23 +127,8 @@ export default function App() {
       await api.logout();
     } catch (e) {}
     setCurrentUser(null);
-    setActivePortal("landing");
-    showToast("You have been signed out.");
-  };
-
-  const handleSwitchUser = async (userId: string) => {
-    try {
-      const res = await api.switchDemoUser(userId);
-      setCurrentUser(res.user);
-      showToast(`Switched perspective to ${res.user.first_name} (${res.user.role.replace("_", " ")})`);
-      if (res.user.role === "client") {
-        setActivePortal("client");
-      } else {
-        setActivePortal("expert");
-      }
-    } catch (err: any) {
-      console.error(err);
-    }
+    setActivePortal("auth");
+    showToast("You have been signed out. Please log in with your credentials.");
   };
 
   const handleToggleOnline = async () => {
@@ -172,12 +158,19 @@ export default function App() {
       handleOpenAuth(
         "register",
         "client",
-        "Please create your Client Account or sign in to dispatch on-demand IT & field rescue."
+        "Please sign in or create your Client Account to dispatch on-demand IT & field rescue."
       );
+      return;
+    }
+    if (currentUser.role !== "client") {
+      showToast("Only Client accounts can dispatch tickets. You are logged in as an Engineer.");
       return;
     }
     setIsRaiseModalOpen(true);
   };
+
+  const isClient = currentUser?.role === "client";
+  const isEngineer = currentUser?.role === "expert" || currentUser?.role === "field_engineer";
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans selection:bg-teal-500 selection:text-white">
@@ -198,12 +191,31 @@ export default function App() {
         />
       )}
 
-      {/* Main Header & Workspace Switcher with Chat Notification Bell and Auth Controls */}
+      {/* Main Header & Workspace Switcher with Chat Notification Bell and Role Badges */}
       <Navbar
         activePortal={activePortal}
-        setActivePortal={setActivePortal}
+        setActivePortal={(portal) => {
+          if (!currentUser && (portal === "client" || portal === "expert")) {
+            handleOpenAuth(
+              "login",
+              portal === "client" ? "client" : "expert",
+              `Please log in to access the ${portal === "client" ? "Client Portal" : "Engineer Console"}.`
+            );
+            return;
+          }
+          if (currentUser) {
+            if (portal === "client" && !isClient) {
+              showToast("Your account is registered as a Rescue Engineer.");
+              return;
+            }
+            if (portal === "expert" && !isEngineer) {
+              showToast("Your account is registered as a Client.");
+              return;
+            }
+          }
+          setActivePortal(portal);
+        }}
         currentUser={currentUser}
-        onSwitchUser={handleSwitchUser}
         onToggleOnline={handleToggleOnline}
         onOpenRaiseModal={handleRaiseTicketRequest}
         onOpenAuthModal={handleOpenAuth}
@@ -215,12 +227,21 @@ export default function App() {
 
       {/* Main Content View Container */}
       <main className="flex-1">
+        {/* VIEW 1: AUTH GATEWAY (Default for unauthenticated users) */}
+        {activePortal === "auth" && !currentUser && (
+          <AuthPortalView
+            onAuthSuccess={handleAuthSuccess}
+            onExploreShowcase={() => setActivePortal("landing")}
+          />
+        )}
+
+        {/* VIEW 2: PUBLIC PLATFORM SHOWCASE (Explore features, SLAs, AI diagnostics) */}
         {activePortal === "landing" && (
           <PublicLanding
             onOpenRaiseModal={handleRaiseTicketRequest}
             onNavigateToClient={() => {
               if (!currentUser) {
-                handleOpenAuth("login", "client", "Sign in with your Client account to access the Client Hub.");
+                handleOpenAuth("login", "client", "Sign in with your Client credentials to access the Client Hub.");
               } else {
                 setActivePortal("client");
               }
@@ -236,28 +257,45 @@ export default function App() {
           />
         )}
 
+        {/* VIEW 3: CLIENT PORTAL (Protected for Clients) */}
         {activePortal === "client" && (
-          <ClientPortal
-            currentUser={currentUser}
-            onOpenRaiseModal={handleRaiseTicketRequest}
-            onInspectTicket={(t) => setInspectedTicket(t)}
-            onOpenChat={handleOpenChat}
-          />
+          currentUser && isClient ? (
+            <ClientPortal
+              currentUser={currentUser}
+              onOpenRaiseModal={handleRaiseTicketRequest}
+              onInspectTicket={(t) => setInspectedTicket(t)}
+              onOpenChat={handleOpenChat}
+            />
+          ) : (
+            <AuthPortalView
+              onAuthSuccess={handleAuthSuccess}
+              onExploreShowcase={() => setActivePortal("landing")}
+            />
+          )
         )}
 
+        {/* VIEW 4: ENGINEER CONSOLE (Protected for Rescue Engineers) */}
         {activePortal === "expert" && (
-          <ExpertPortal
-            currentUser={currentUser}
-            onToggleOnline={handleToggleOnline}
-            onInspectTicket={(t) => setInspectedTicket(t)}
-            onOpenChat={handleOpenChat}
-          />
+          currentUser && isEngineer ? (
+            <ExpertPortal
+              currentUser={currentUser}
+              onToggleOnline={handleToggleOnline}
+              onInspectTicket={(t) => setInspectedTicket(t)}
+              onOpenChat={handleOpenChat}
+            />
+          ) : (
+            <AuthPortalView
+              onAuthSuccess={handleAuthSuccess}
+              onExploreShowcase={() => setActivePortal("landing")}
+            />
+          )
         )}
 
+        {/* VIEW 5: HA CLUSTER OPERATIONS (Transparent to all users) */}
         {activePortal === "ops" && <OperationsCenter />}
       </main>
 
-      {/* Authentication Modal (Sign In / Register / Role Dispatch) */}
+      {/* Authentication Modal (Pop-up when triggered from action buttons) */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -315,7 +353,7 @@ export default function App() {
               Multi-Region Cluster: Operational
             </span>
             <span>SLA Target: 99.994%</span>
-            <span>ISO 27001 & ITIL Verified</span>
+            <span>Single Identity Access Architecture</span>
           </div>
         </div>
       </footer>
